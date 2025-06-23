@@ -10,19 +10,33 @@ const IdentityVerification = () => {
   const [verificationResult, setVerificationResult] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
+  const [customerId, setCustomerId] = useState(null);
   
   const webcamRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Configuration for Innovatrics API (using Vite's import.meta.env)
-  const INNOVATRICS_CONFIG = {
-    apiKey: import.meta.env.VITE_INNOVATRICS_API_KEY || 'your-api-key-here',
-    baseUrl: import.meta.env.VITE_INNOVATRICS_BASE_URL || 'https://api.innovatrics.com',
-    projectId: import.meta.env.VITE_INNOVATRICS_PROJECT_ID || 'your-project-id'
+  // Backend API Configuration
+  const API_CONFIG = {
+    baseUrl: 'https://dis.reliefvalidation.com.bd/api/v1',
+    apiKey: 'aW5rX2M3Njg1ZjNmNDBmYzVmMjQyMWNiZGExMmYyNmQ3MGMzOmluc19leUp0WlhSaFpHRjBZU0k2SUhzaVkyeHBaVzUwSWpvZ2V5SnBaQ0k2SUNJd1pESTNNalE0WVMweE56RXhMVFExWXpNdFltUmpaUzFqWldOaFlUZzRaV05qWTJNaUxDQWlibUZ0WlNJNklDSlNaV3hwWldZZ1ZtRnNhV1JoZEdsdmJpQk1hVzFwZEdWa0lDZ2dVbFpNS1NKOUxDQWliR2xqWlc1elpWOWpkWE4wYjIxZmNISnZjR1Z5ZEdsbGN5STZJSHNpTDJOdmJuUnlZV04wTDJSdmRDOWthWE12Wlc1aFlteGxaQ0k2SUNKMGNuVmxJaXdnSWk5amIyNTBjbUZqZEM5a2IzUXZaR2x6TDJabFlYUjFjbVZ6TDNKbFlXeFVhVzFsVkhKaGJuTmhZM1JwYjI1U1pYQnZjblJwYm1kU1pYRjFhWEpsWkNJNklDSjBjblZsSWl3Z0lpOWpiMjUwY21GamRDOWtiM1F2Y21WaGJGUnBiV1ZVY21GdWMyRmpkR2x2YmxKbGNHOXlkR2x1WjFKbGNYVnBjbVZrSWpvZ0luUnlkV1VpTENBaUwyTnZiblJ5WVdOMEwyUnZkQzlrYVhNdmJHbGpaVzV6WlZabGNuTnBiMjRpT2lBaU15SjlMQ0FpWTNKbFlYUnBiMjVmZEdsdFpYTjBZVzF3SWpvZ0lqRXhMekEwTHpJd01qUWdNVGc2TlRjNk1UZ2dWVlJESWl3Z0luWmhiR2xrWDNSdklqb2dJakV5THpBMEx6SXdNalVnTURBNk1EQTZNREFnVlZSREluMHNJQ0p6YVdkdVlYUjFjbVVpT2lBaWJHRkdRVGR6U2t4MFlrWTBWbEZPT1RZeVRXcHFWamd4YUVJM1Z5OVBSRTVYZEVKUWFtZ3lLMDVsUTNReE9FZDVWa1pzVTJaREsyZzNkVkJMVjJsRVVYSnFUbEZYSzNNeE5ubzJMM1ZqWkd0dmEwWktRbWM5UFNKOQ=='
   };
 
-  // Check if we're in demo mode (no real API credentials)
-  const isDemoMode = true; // FORCED DEMO MODE FOR TESTING PURPOSES
+  // Create customer session
+  const createCustomer = async () => {
+    try {
+      const response = await axios.post(`${API_CONFIG.baseUrl}/customers`, {}, {
+        headers: {
+          'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      setCustomerId(response.data.id);
+      return response.data.id;
+    } catch (err) {
+      console.error('Failed to create customer:', err);
+      throw err;
+    }
+  };
 
   const captureImage = useCallback(() => {
     if (webcamRef.current) {
@@ -44,22 +58,6 @@ const IdentityVerification = () => {
     }
   };
 
-  // Mock API response for demo mode
-  const mockApiResponse = (type) => {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        resolve({
-          data: {
-            success: true,
-            message: `${type} verification completed successfully (Demo Mode)`,
-            confidence: Math.random() * 0.3 + 0.7, // Random confidence between 0.7-1.0
-            timestamp: new Date().toISOString()
-          }
-        });
-      }, 2000); // Simulate 2 second processing time
-    });
-  };
-
   const processDocument = async () => {
     if (!capturedImage) return;
     
@@ -67,43 +65,65 @@ const IdentityVerification = () => {
     setError(null);
     
     try {
-      let result;
-      
-      if (isDemoMode) {
-        result = await mockApiResponse('Document');
-        setVerificationResult({
-          type: 'document',
-          data: result.data,
-          success: true
-        });
-      } else {
-        const response = await fetch(capturedImage);
-        const blob = await response.blob();
-        
-        const formData = new FormData();
-        formData.append('document', blob, 'document.jpg');
-        formData.append('projectId', INNOVATRICS_CONFIG.projectId);
-        
-        result = await axios.post(
-          `${INNOVATRICS_CONFIG.baseUrl}/document/process`,
-          formData,
-          {
-            headers: {
-              'Authorization': `Bearer ${INNOVATRICS_CONFIG.apiKey}`,
-              'Content-Type': 'multipart/form-data'
-            }
-          }
-        );
-        setVerificationResult({
-          type: 'document',
-          data: result.data,
-          success: result.data.success
-        });
+      // Create customer if not exists
+      let currentCustomerId = customerId;
+      if (!currentCustomerId) {
+        currentCustomerId = await createCustomer();
       }
+
+      // Step 1: Create document (PUT /document)
+      await axios.put(
+        `${API_CONFIG.baseUrl}/customers/${currentCustomerId}/document`,
+        {
+          advice: {
+            classification: {
+              country: 'BGD',
+              type: 'national-id-card'
+            }
+          },
+          sources: ['VIZ', 'MRZ']
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      // Step 2: Upload document page (PUT /document/pages)
+      // Convert base64 image (remove data:image/jpeg;base64, prefix)
+      const base64Image = capturedImage.split(',')[1];
+      const pageType = 'front'; // or 'back' if needed
+      const uploadPayload = {
+        image: { data: base64Image },
+        advice: {
+          classification: {
+            pageTypes: [pageType]
+          }
+        }
+      };
+      const result = await axios.put(
+        `${API_CONFIG.baseUrl}/customers/${currentCustomerId}/document/pages`,
+        uploadPayload,
+        {
+          headers: {
+            'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      setVerificationResult({
+        type: 'document',
+        data: result.data,
+        success: true
+      });
       
       setCurrentStep('face');
     } catch (err) {
-      setError('Document processing failed: ' + err.message);
+      console.error('Document processing failed:', err);
+      setError('Document processing failed: ' + (err.response?.data?.error || err.message));
       setVerificationResult({
         type: 'document',
         success: false,
@@ -121,30 +141,22 @@ const IdentityVerification = () => {
     setError(null);
     
     try {
-      let result;
-      
-      if (isDemoMode) {
-        result = await mockApiResponse('Face');
-      } else {
-        const response = await fetch(capturedImage);
-        const blob = await response.blob();
-        
-        const formData = new FormData();
-        formData.append('face', blob, 'face.jpg');
-        formData.append('projectId', INNOVATRICS_CONFIG.projectId);
-        
-        result = await axios.post(
-          `${INNOVATRICS_CONFIG.baseUrl}/face/process`,
-          formData,
-          {
-            headers: {
-              'Authorization': `Bearer ${INNOVATRICS_CONFIG.apiKey}`,
-              'Content-Type': 'multipart/form-data'
-            }
+      // Convert base64 image (remove data:image/jpeg;base64, prefix)
+      const base64Image = capturedImage.split(',')[1];
+      // Send to backend: POST /faces
+      const result = await axios.post(
+        `${API_CONFIG.baseUrl}/faces`,
+        {
+          image: { data: base64Image }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+            'Content-Type': 'application/json'
           }
-        );
-      }
-      
+        }
+      );
+
       setVerificationResult(prev => ({
         ...prev,
         face: {
@@ -155,7 +167,8 @@ const IdentityVerification = () => {
       
       setCurrentStep('liveness');
     } catch (err) {
-      setError('Face processing failed: ' + err.message);
+      console.error('Face processing failed:', err);
+      setError('Face processing failed: ' + (err.response?.data?.error || err.message));
       setVerificationResult(prev => ({
         ...prev,
         face: {
@@ -175,30 +188,22 @@ const IdentityVerification = () => {
     setError(null);
     
     try {
-      let result;
-      
-      if (isDemoMode) {
-        result = await mockApiResponse('Liveness');
-      } else {
-        const response = await fetch(capturedImage);
-        const blob = await response.blob();
-        
-        const formData = new FormData();
-        formData.append('liveness', blob, 'liveness.jpg');
-        formData.append('projectId', INNOVATRICS_CONFIG.projectId);
-        
-        result = await axios.post(
-          `${INNOVATRICS_CONFIG.baseUrl}/liveness/process`,
-          formData,
-          {
-            headers: {
-              'Authorization': `Bearer ${INNOVATRICS_CONFIG.apiKey}`,
-              'Content-Type': 'multipart/form-data'
-            }
+      // Convert base64 image (remove data:image/jpeg;base64, prefix)
+      const base64Image = capturedImage.split(',')[1];
+      // Send to backend: PUT /customers/{customerId}/liveness
+      const result = await axios.put(
+        `${API_CONFIG.baseUrl}/customers/${customerId}/liveness`,
+        {
+          image: { data: base64Image }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+            'Content-Type': 'application/json'
           }
-        );
-      }
-      
+        }
+      );
+
       setVerificationResult(prev => ({
         ...prev,
         liveness: {
@@ -209,7 +214,8 @@ const IdentityVerification = () => {
       
       setCurrentStep('complete');
     } catch (err) {
-      setError('Liveness detection failed: ' + err.message);
+      console.error('Liveness detection failed:', err);
+      setError('Liveness detection failed: ' + (err.response?.data?.error || err.message));
       setVerificationResult(prev => ({
         ...prev,
         liveness: {
@@ -227,18 +233,13 @@ const IdentityVerification = () => {
     setCapturedImage(null);
     setVerificationResult(null);
     setError(null);
+    setCustomerId(null);
   };
 
   const renderDocumentCapture = () => (
     <div className="capture-section">
       <h3>Document Capture</h3>
       <p>Please capture or upload a clear image of your identity document</p>
-      
-      {isDemoMode && (
-        <div className="demo-notice">
-          <p>🔧 <strong>Demo Mode:</strong> This is a demonstration. API calls are simulated.</p>
-        </div>
-      )}
       
       <div className="capture-options">
         <div className="webcam-section">
@@ -292,12 +293,6 @@ const IdentityVerification = () => {
       <h3>Face Capture</h3>
       <p>Please take a clear selfie photo</p>
       
-      {isDemoMode && (
-        <div className="demo-notice">
-          <p>🔧 <strong>Demo Mode:</strong> This is a demonstration. API calls are simulated.</p>
-        </div>
-      )}
-      
       <div className="webcam-section">
         <Webcam
           ref={webcamRef}
@@ -335,12 +330,6 @@ const IdentityVerification = () => {
     <div className="capture-section">
       <h3>Liveness Detection</h3>
       <p>Please follow the instructions for liveness verification</p>
-      
-      {isDemoMode && (
-        <div className="demo-notice">
-          <p>🔧 <strong>Demo Mode:</strong> This is a demonstration. API calls are simulated.</p>
-        </div>
-      )}
       
       <div className="liveness-instructions">
         <h4>Instructions:</h4>
@@ -389,18 +378,24 @@ const IdentityVerification = () => {
     <div className="results-section">
       <h3>Verification Results</h3>
       
-      {isDemoMode && (
-        <div className="demo-notice">
-          <p>🔧 <strong>Demo Mode:</strong> These are simulated results for demonstration purposes.</p>
-        </div>
-      )}
-      
       {verificationResult && (
         <div className="results-grid">
           <div className={`result-card ${verificationResult.document?.success ? 'success' : 'error'}`}>
             <h4>Document Verification</h4>
             {verificationResult.document?.success ? (
-              <p>✅ Document verified successfully</p>
+              <div>
+                <p>✅ Document verified successfully</p>
+                {verificationResult.document.data?.extractedData && (
+                  <div className="extracted-data">
+                    <h5>Extracted Data:</h5>
+                    <ul>
+                      <li>Name: {verificationResult.document.data.extractedData.firstName} {verificationResult.document.data.extractedData.lastName}</li>
+                      <li>DOB: {verificationResult.document.data.extractedData.dateOfBirth}</li>
+                      <li>Document: {verificationResult.document.data.extractedData.documentNumber}</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
             ) : (
               <p>❌ Document verification failed</p>
             )}
@@ -409,7 +404,12 @@ const IdentityVerification = () => {
           <div className={`result-card ${verificationResult.face?.success ? 'success' : 'error'}`}>
             <h4>Face Verification</h4>
             {verificationResult.face?.success ? (
-              <p>✅ Face verified successfully</p>
+              <div>
+                <p>✅ Face verified successfully</p>
+                {verificationResult.face.data?.quality && (
+                  <p>Quality Score: {(verificationResult.face.data.quality.score * 100).toFixed(1)}%</p>
+                )}
+              </div>
             ) : (
               <p>❌ Face verification failed</p>
             )}
@@ -418,7 +418,12 @@ const IdentityVerification = () => {
           <div className={`result-card ${verificationResult.liveness?.success ? 'success' : 'error'}`}>
             <h4>Liveness Detection</h4>
             {verificationResult.liveness?.success ? (
-              <p>✅ Liveness verified successfully</p>
+              <div>
+                <p>✅ Liveness verified successfully</p>
+                {verificationResult.liveness.data?.score && (
+                  <p>Liveness Score: {(verificationResult.liveness.data.score * 100).toFixed(1)}%</p>
+                )}
+              </div>
             ) : (
               <p>❌ Liveness verification failed</p>
             )}
