@@ -374,68 +374,79 @@ const IdentityVerification = () => {
     </div>
   );
 
-  const renderResults = () => (
-    <div className="results-section">
-      <h3>Verification Results</h3>
-      
-      {verificationResult && (
-        <div className="results-grid">
-          <div className={`result-card ${verificationResult.document?.success ? 'success' : 'error'}`}>
-            <h4>Document Verification</h4>
-            {verificationResult.document?.success ? (
-              <div>
-                <p>✅ Document verified successfully</p>
-                {verificationResult.document.data?.extractedData && (
-                  <div className="extracted-data">
-                    <h5>Extracted Data:</h5>
-                    <ul>
-                      <li>Name: {verificationResult.document.data.extractedData.firstName} {verificationResult.document.data.extractedData.lastName}</li>
-                      <li>DOB: {verificationResult.document.data.extractedData.dateOfBirth}</li>
-                      <li>Document: {verificationResult.document.data.extractedData.documentNumber}</li>
-                    </ul>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p>❌ Document verification failed</p>
-            )}
+  const renderResults = () => {
+    if (verificationResult) {
+      console.log('Full verificationResult:', verificationResult);
+    }
+    return (
+      <div className="results-section">
+        <h3>Verification Results</h3>
+        {verificationResult && (
+          <div className="results-grid">
+            {/* Document */}
+            <div className={`result-card ${verificationResult.success ? 'success' : 'error'}`}>
+              <h4>Document Verification</h4>
+              {verificationResult.success ? (
+                <div>
+                  <p>✅ Document verified successfully</p>
+                  <ul>
+                    <li>Type: {verificationResult.data?.documentType?.type}</li>
+                    <li>Country: {verificationResult.data?.documentType?.country}</li>
+                    <li>Edition: {verificationResult.data?.documentType?.edition}</li>
+                    <li>Support Level: {verificationResult.data?.documentType?.supportLevel}</li>
+                    <li>Detection Confidence: {verificationResult.data?.detection?.confidence ? (verificationResult.data.detection.confidence * 100).toFixed(2) + '%' : 'N/A'}</li>
+                    <li>Corner Out of Image: {verificationResult.data?.detection?.cornerOutOfImage ? 'Yes' : 'No'}</li>
+                  </ul>
+                  <details>
+                    <summary>Show Corner Coordinates</summary>
+                    <pre>{JSON.stringify(verificationResult.data?.detection?.coordinates, null, 2)}</pre>
+                  </details>
+                </div>
+              ) : (
+                <p>❌ Document verification failed</p>
+              )}
+            </div>
+            {/* Face */}
+            <div className={`result-card ${verificationResult.face?.success ? 'success' : 'error'}`}>
+              <h4>Face Verification</h4>
+              {verificationResult.face?.success ? (
+                <div>
+                  <p>✅ Face verified successfully</p>
+                  <ul>
+                    <li>Face ID: {verificationResult.face.data?.id}</li>
+                    <li>Detection Confidence: {verificationResult.face.data?.detection?.confidence ? (verificationResult.face.data.detection.confidence * 100).toFixed(2) + '%' : 'N/A'}</li>
+                  </ul>
+                  <details>
+                    <summary>Show Face Rectangle</summary>
+                    <pre>{JSON.stringify(verificationResult.face.data?.detection?.faceRectangle, null, 2)}</pre>
+                  </details>
+                </div>
+              ) : (
+                <p>❌ Face verification failed</p>
+              )}
+            </div>
+            {/* Liveness */}
+            <div className={`result-card ${verificationResult.liveness?.success ? 'success' : 'error'}`}>
+              <h4>Liveness Detection</h4>
+              {verificationResult.liveness?.success ? (
+                <div>
+                  <p>✅ Liveness verified successfully</p>
+                  <ul>
+                    <li>Link: {verificationResult.liveness.data?.links?.self}</li>
+                  </ul>
+                </div>
+              ) : (
+                <p>❌ Liveness verification failed</p>
+              )}
+            </div>
           </div>
-          
-          <div className={`result-card ${verificationResult.face?.success ? 'success' : 'error'}`}>
-            <h4>Face Verification</h4>
-            {verificationResult.face?.success ? (
-              <div>
-                <p>✅ Face verified successfully</p>
-                {verificationResult.face.data?.quality && (
-                  <p>Quality Score: {(verificationResult.face.data.quality.score * 100).toFixed(1)}%</p>
-                )}
-              </div>
-            ) : (
-              <p>❌ Face verification failed</p>
-            )}
-          </div>
-          
-          <div className={`result-card ${verificationResult.liveness?.success ? 'success' : 'error'}`}>
-            <h4>Liveness Detection</h4>
-            {verificationResult.liveness?.success ? (
-              <div>
-                <p>✅ Liveness verified successfully</p>
-                {verificationResult.liveness.data?.score && (
-                  <p>Liveness Score: {(verificationResult.liveness.data.score * 100).toFixed(1)}%</p>
-                )}
-              </div>
-            ) : (
-              <p>❌ Liveness verification failed</p>
-            )}
-          </div>
-        </div>
-      )}
-      
-      <button onClick={resetVerification} className="reset-btn">
-        Start New Verification
-      </button>
-    </div>
-  );
+        )}
+        <button onClick={resetVerification} className="reset-btn">
+          Start New Verification
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="identity-verification">
