@@ -261,9 +261,11 @@ const IdentityVerification = () => {
 
   // Document capture UI for front/back
   const [documentSide, setDocumentSide] = useState('front'); // 'front' or 'back'
+  const [sidePrompt, setSidePrompt] = useState('');
   const renderDocumentCapture = () => (
     <div className="capture-section">
       <h3>Document Capture ({documentSide === 'front' ? 'Front' : 'Back'})</h3>
+      {sidePrompt && <div className="side-prompt">{sidePrompt}</div>}
       <p>Please capture or upload a clear image of the {documentSide} side of your identity document</p>
       <div className="capture-options">
         <div className="webcam-section">
@@ -275,15 +277,26 @@ const IdentityVerification = () => {
             className="webcam"
           />
           <button 
-            onClick={() => {
+            onClick={async () => {
               const imageSrc = webcamRef.current.getScreenshot();
-              setCapturedImage(imageSrc);
+              if (documentSide === 'front') {
+                setFrontImage(imageSrc);
+                setSidePrompt('Front captured! Now flip your document to the back side.');
+                setTimeout(() => {
+                  setDocumentSide('back');
+                  setSidePrompt('');
+                }, 1500);
+              } else {
+                setBackImage(imageSrc);
+                setSidePrompt('');
+                await processDocument();
+              }
             }}
             className="capture-btn"
             disabled={isProcessing}
             style={{ marginTop: '1rem' }}
           >
-            Capture {documentSide === 'front' ? 'Front' : 'Back'}
+            {documentSide === 'front' ? 'Capture Front' : 'Capture Back'}
           </button>
         </div>
         <div className="upload-section">
@@ -291,11 +304,24 @@ const IdentityVerification = () => {
           <input
             type="file"
             ref={fileInputRef}
-            onChange={e => {
+            onChange={async e => {
               const file = e.target.files[0];
               if (file) {
                 const reader = new FileReader();
-                reader.onload = (ev) => setCapturedImage(ev.target.result);
+                reader.onload = (ev) => {
+                  if (documentSide === 'front') {
+                    setFrontImage(ev.target.result);
+                    setSidePrompt('Front uploaded! Now upload the back side.');
+                    setTimeout(() => {
+                      setDocumentSide('back');
+                      setSidePrompt('');
+                    }, 1500);
+                  } else {
+                    setBackImage(ev.target.result);
+                    setSidePrompt('');
+                    processDocument();
+                  }
+                };
                 reader.readAsDataURL(file);
               }
             }}
@@ -304,30 +330,6 @@ const IdentityVerification = () => {
           />
         </div>
       </div>
-      {capturedImage && (
-        <div className="preview-section">
-          <h4>Captured Image:</h4>
-          <img src={capturedImage} alt={`Captured ${documentSide}`} className="preview-image" />
-          <button
-            onClick={async () => {
-              if (documentSide === 'front') {
-                setFrontImage(capturedImage);
-                setCapturedImage(null);
-                setDocumentSide('back');
-              } else {
-                setBackImage(capturedImage);
-                setCapturedImage(null);
-                setDocumentSide('front');
-                await processDocument();
-              }
-            }}
-            className="process-btn"
-            disabled={isProcessing}
-          >
-            {documentSide === 'front' ? 'Save Front & Continue' : 'Save Back & Process Document'}
-          </button>
-        </div>
-      )}
       {(frontImage && !backImage) && (
         <div className="preview-section">
           <h4>Front Image Saved</h4>
