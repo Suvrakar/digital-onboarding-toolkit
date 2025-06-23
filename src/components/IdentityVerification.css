@@ -250,8 +250,9 @@
 }
 
 .results-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 1.5rem;
   margin-bottom: 2rem;
 }
@@ -263,6 +264,10 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   border-left: 4px solid #e0e0e0;
   transition: all 0.3s ease;
+  max-width: 340px;
+  min-width: 260px;
+  flex: 1 1 320px;
+  margin-bottom: 1rem;
 }
 
 .result-card.success {
@@ -340,7 +345,13 @@
   }
   
   .results-grid {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .result-card {
+    max-width: 100%;
+    min-width: 0;
   }
   
   .webcam {

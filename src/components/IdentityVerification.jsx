@@ -6,6 +6,8 @@ import './IdentityVerification.css';
 
 const IdentityVerification = () => {
   const [currentStep, setCurrentStep] = useState('document'); // document, face, liveness
+  const [frontImage, setFrontImage] = useState(null);
+  const [backImage, setBackImage] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
   const [verificationResult, setVerificationResult] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -58,19 +60,35 @@ const IdentityVerification = () => {
     }
   };
 
+  // Fetch OCR results for a customer
+  const fetchOcrResults = async (customerId) => {
+    try {
+      const response = await axios.get(
+        `${API_CONFIG.baseUrl}/customers/${customerId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      return response.data;
+    } catch (err) {
+      console.error('Failed to fetch OCR results:', err);
+      return null;
+    }
+  };
+
   const processDocument = async () => {
-    if (!capturedImage) return;
-    
+    if (!frontImage || !backImage) return;
     setIsProcessing(true);
     setError(null);
-    
     try {
       // Create customer if not exists
       let currentCustomerId = customerId;
       if (!currentCustomerId) {
         currentCustomerId = await createCustomer();
       }
-
       // Step 1: Create document (PUT /document)
       await axios.put(
         `${API_CONFIG.baseUrl}/customers/${currentCustomerId}/document`,
@@ -90,36 +108,39 @@ const IdentityVerification = () => {
           }
         }
       );
-
-      // Step 2: Upload document page (PUT /document/pages)
-      // Convert base64 image (remove data:image/jpeg;base64, prefix)
-      const base64Image = capturedImage.split(',')[1];
-      const pageType = 'front'; // or 'back' if needed
-      const uploadPayload = {
-        image: { data: base64Image },
-        advice: {
-          classification: {
-            pageTypes: [pageType]
+      // Step 2: Upload front and back pages
+      const uploadPage = async (img, pageType) => {
+        const base64Image = img.split(',')[1];
+        const uploadPayload = {
+          image: { data: base64Image },
+          advice: {
+            classification: {
+              pageTypes: [pageType]
+            }
           }
-        }
+        };
+        return axios.put(
+          `${API_CONFIG.baseUrl}/customers/${currentCustomerId}/document/pages`,
+          uploadPayload,
+          {
+            headers: {
+              'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
       };
-      const result = await axios.put(
-        `${API_CONFIG.baseUrl}/customers/${currentCustomerId}/document/pages`,
-        uploadPayload,
-        {
-          headers: {
-            'Authorization': `Bearer ${API_CONFIG.apiKey}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
+      const frontResult = await uploadPage(frontImage, 'front');
+      const backResult = await uploadPage(backImage, 'back');
+      // Step 3: Fetch OCR results
+      const ocrData = await fetchOcrResults(currentCustomerId);
       setVerificationResult({
         type: 'document',
-        data: result.data,
-        success: true
+        data: frontResult.data, // You may want to merge front/back data
+        backData: backResult.data,
+        success: true,
+        ocr: ocrData
       });
-      
       setCurrentStep('face');
     } catch (err) {
       console.error('Document processing failed:', err);
@@ -230,17 +251,20 @@ const IdentityVerification = () => {
 
   const resetVerification = () => {
     setCurrentStep('document');
+    setFrontImage(null);
+    setBackImage(null);
     setCapturedImage(null);
     setVerificationResult(null);
     setError(null);
     setCustomerId(null);
   };
 
+  // Document capture UI for front/back
+  const [documentSide, setDocumentSide] = useState('front'); // 'front' or 'back'
   const renderDocumentCapture = () => (
     <div className="capture-section">
-      <h3>Document Capture</h3>
-      <p>Please capture or upload a clear image of your identity document</p>
-      
+      <h3>Document Capture ({documentSide === 'front' ? 'Front' : 'Back'})</h3>
+      <p>Please capture or upload a clear image of the {documentSide} side of your identity document</p>
       <div className="capture-options">
         <div className="webcam-section">
           <Webcam
@@ -251,38 +275,63 @@ const IdentityVerification = () => {
             className="webcam"
           />
           <button 
-            onClick={captureImage}
+            onClick={() => {
+              const imageSrc = webcamRef.current.getScreenshot();
+              setCapturedImage(imageSrc);
+            }}
             className="capture-btn"
             disabled={isProcessing}
             style={{ marginTop: '1rem' }}
           >
-            Capture Document
+            Capture {documentSide === 'front' ? 'Front' : 'Back'}
           </button>
         </div>
-        
         <div className="upload-section">
           <p>Or upload from device:</p>
           <input
             type="file"
             ref={fileInputRef}
-            onChange={handleFileUpload}
+            onChange={e => {
+              const file = e.target.files[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => setCapturedImage(ev.target.result);
+                reader.readAsDataURL(file);
+              }
+            }}
             accept="image/*"
             className="file-input"
           />
         </div>
       </div>
-      
       {capturedImage && (
         <div className="preview-section">
           <h4>Captured Image:</h4>
-          <img src={capturedImage} alt="Captured document" className="preview-image" />
-          <button 
-            onClick={processDocument}
+          <img src={capturedImage} alt={`Captured ${documentSide}`} className="preview-image" />
+          <button
+            onClick={async () => {
+              if (documentSide === 'front') {
+                setFrontImage(capturedImage);
+                setCapturedImage(null);
+                setDocumentSide('back');
+              } else {
+                setBackImage(capturedImage);
+                setCapturedImage(null);
+                setDocumentSide('front');
+                await processDocument();
+              }
+            }}
             className="process-btn"
             disabled={isProcessing}
           >
-            {isProcessing ? 'Processing...' : 'Process Document'}
+            {documentSide === 'front' ? 'Save Front & Continue' : 'Save Back & Process Document'}
           </button>
+        </div>
+      )}
+      {(frontImage && !backImage) && (
+        <div className="preview-section">
+          <h4>Front Image Saved</h4>
+          <img src={frontImage} alt="Front preview" className="preview-image" />
         </div>
       )}
     </div>
@@ -401,6 +450,13 @@ const IdentityVerification = () => {
                     <summary>Show Corner Coordinates</summary>
                     <pre>{JSON.stringify(verificationResult.data?.detection?.coordinates, null, 2)}</pre>
                   </details>
+                  {/* OCR Results */}
+                  {verificationResult.ocr && (
+                    <div className="ocr-section">
+                      <h5>OCR Extracted Data</h5>
+                      <pre style={{textAlign: 'left', background: '#f8f9fa', padding: '1em', borderRadius: '6px'}}>{JSON.stringify(verificationResult.ocr, null, 2)}</pre>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p>❌ Document verification failed</p>
